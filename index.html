@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Last-Minute Notes AI</title>
+<style>
+  :root { --ink:#2b2f36; --accent:#4f6b5f; --line:#e1dccf; --bg:#f6f3ec; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+  main { max-width: 800px; margin: auto; padding: 20px 16px 60px; }
+  h1 { margin: 0 0 4px; } p.sub { margin: 0 0 16px; color:#6b6f76; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
+  textarea { width:100%; min-height:200px; padding:10px; border:1px solid var(--line); border-radius:8px; font:inherit; resize:vertical; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:10px; }
+  button { padding:10px 16px; border:0; border-radius:8px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:wait; }
+  select { padding:9px; border:1px solid var(--line); border-radius:8px; font:inherit; }
+  #summary { white-space:pre-wrap; line-height:1.55; }
+  .q { margin-bottom:16px; }
+  .opt { display:block; width:100%; text-align:left; margin-top:6px; background:#fff; color:var(--ink); border:1px solid var(--line); }
+  .opt.right { background:#dff1e4; border-color:#7fb68f; }
+  .opt.wrong { background:#f8e0dc; border-color:#d28b82; }
+  .why { margin-top:6px; font-size:.9rem; color:#555; }
+  .err { color:#b4372a; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Last-Minute Notes AI</h1>
+  <p class="sub">Paste your notes. Get a quick summary and a practice quiz.</p>
+
+  <div class="card">
+    <textarea id="notes" placeholder="Paste your notes here..."></textarea>
+    <div class="row">
+      <button id="sumBtn">Summarise</button>
+      <button id="quizBtn">Make quiz</button>
+      <label>Questions
+        <select id="count"><option>3</option><option selected>5</option><option>8</option><option>10</option></select>
+      </label>
+    </div>
+    <p id="error" class="err"></p>
+  </div>
+
+  <div id="sumCard" class="card hidden"><h2>Summary</h2><div id="summary"></div></div>
+
+  <div id="quizCard" class="card hidden">
+    <h2>Quiz</h2><div id="quiz"></div><p id="score"></p>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+
+async function call(url, body, btn) {
+  $("error").textContent = "";
+  btn.disabled = true;
+  try {
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Something went wrong");
+    return data;
+  } catch (e) {
+    $("error").textContent = e.message;
+    return null;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+$("sumBtn").onclick = async () => {
+  const data = await call("/api/summarise", { notes: $("notes").value }, $("sumBtn"));
+  if (!data) return;
+  $("summary").textContent = data.summary;
+  $("sumCard").classList.remove("hidden");
+};
+
+$("quizBtn").onclick = async () => {
+  const data = await call("/api/quiz", { notes: $("notes").value, count: +$("count").value }, $("quizBtn"));
+  if (!data) return;
+  renderQuiz(data.questions);
+};
+
+function renderQuiz(questions) {
+  const box = $("quiz");
+  box.innerHTML = "";
+  let correct = 0, answered = 0;
+  $("score").textContent = "";
+  questions.forEach((q, i) => {
+    const div = document.createElement("div");
+    div.className = "q";
+    const title = document.createElement("b");
+    title.textContent = `${i + 1}. ${q.q}`;
+    div.appendChild(title);
+    const why = document.createElement("div");
+    why.className = "why hidden";
+    why.textContent = q.why || "";
+    const btns = q.options.map((text, j) => {
+      const b = document.createElement("button");
+      b.className = "opt";
+      b.textContent = text;
+      b.onclick = () => {
+        btns.forEach((x, k) => {
+          x.disabled = true;
+          if (k === q.answer) x.classList.add("right");
+        });
+        if (j !== q.answer) b.classList.add("wrong"); else correct++;
+        why.classList.remove("hidden");
+        answered++;
+        if (answered === questions.length) $("score").textContent = `Score: ${correct} / ${questions.length}`;
+      };
+      div.appendChild(b);
+      return b;
+    });
+    div.appendChild(why);
+    box.appendChild(div);
+  });
+  $("quizCard").classList.remove("hidden");
+}
+</script>
+</body>
+</html>
